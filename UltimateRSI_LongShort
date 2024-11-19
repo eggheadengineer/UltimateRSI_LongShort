@@ -1,0 +1,59 @@
+//@version=5
+indicator("Simplified Long/Short Arrows with Ultimate RSI by LuxAlgo", overlay=true)
+
+// Define input parameters for moving averages
+fastLength = input.int(9, title="Fast Moving Average Length", minval=1)
+slowLength = input.int(21, title="Slow Moving Average Length", minval=1)
+
+// Define Ultimate RSI parameters from LuxAlgo
+length = input.int(14, minval=2)
+smoType1 = input.string('RMA', 'Method', options=['EMA', 'SMA', 'RMA', 'TMA'])
+src = input(close, 'Source')
+
+smooth = input.int(14, minval=1, group='Signal Line')
+smoType2 = input.string('EMA', 'Method', options=['EMA', 'SMA', 'RMA', 'TMA'], group='Signal Line')
+
+obValue = input.float(70, 'Overbought')
+osValue = input.float(30, 'Oversold')
+
+// Moving Average Function
+ma(x, len, maType) =>
+    switch maType
+        'EMA' => ta.ema(x, len)
+        'SMA' => ta.sma(x, len)
+        'RMA' => ta.rma(x, len)
+        'TMA' => ta.sma(ta.sma(x, len), len)
+
+// Calculate Ultimate RSI
+upper = ta.highest(src, length)
+lower = ta.lowest(src, length)
+r = upper - lower
+
+d = src - src[1]
+diff = upper > upper[1] ? r 
+  : lower < lower[1] ? -r 
+  : d
+
+num = ma(diff, length, smoType1)
+den = ma(math.abs(diff), length, smoType1)
+arsi = num / den * 50 + 50
+
+signal = ma(arsi, smooth, smoType2)
+
+// Calculate moving averages
+fastMA = ta.sma(close, fastLength)
+slowMA = ta.sma(close, slowLength)
+
+// Define long and short conditions using Ultimate RSI
+longCondition = ta.crossover(fastMA, slowMA) and arsi < osValue and signal < osValue
+shortCondition = ta.crossunder(fastMA, slowMA) and arsi > obValue and signal > obValue
+
+// Plot green arrow for long condition
+plotshape(longCondition, title="Long Signal", location=location.belowbar, color=color.green, style=shape.labelup, size=size.small, text="LONG")
+
+// Plot red arrow for short condition
+plotshape(shortCondition, title="Short Signal", location=location.abovebar, color=color.red, style=shape.labeldown, size=size.small, text="SHORT")
+
+// Alert conditions
+alertcondition(longCondition, title="Long Alert", message="Go Long!")
+alertcondition(shortCondition, title="Short Alert", message="Go Short!")
