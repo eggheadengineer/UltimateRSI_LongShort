@@ -1,0 +1,91 @@
+// NinjaScript strategy equivalent
+using NinjaTrader.NinjaScript.Strategies;
+using NinjaTrader.Data;
+using NinjaTrader.Cbi;
+using NinjaTrader.NinjaScript;
+using System;
+using NinjaTrader.Gui.Tools;
+
+namespace NinjaTrader.NinjaScript.Strategies
+{
+    public class UltimateRSIstrategy : Strategy
+    {
+        private int fastLength;
+        private int slowLength;
+        private int rsiLength;
+        private int smooth;
+        private double overbought;
+        private double oversold;
+        
+        private Series<double> ultimateRsi;
+        private Series<double> signal;
+
+        protected override void OnStateChange()
+        {
+            if (State == State.SetDefaults)
+            {
+                Description = "Automated Trading Strategy with Ultimate RSI by LuxAlgo";
+                Name = "UltimateRSIstrategy";
+                Calculate = Calculate.OnBarClose;
+                IsExitOnSessionCloseStrategy = true;
+                ExitOnSessionCloseSeconds = 30;
+                IsInstantiatedOnEachOptimizationIteration = false;
+                
+                fastLength = 9;
+                slowLength = 21;
+                rsiLength = 14;
+                smooth = 14;
+                overbought = 70;
+                oversold = 30;
+            }
+            else if (State == State.Configure)
+            {
+                AddDataSeries(Data.BarsPeriodType.Minute, 5);
+                ultimateRsi = new Series<double>(this, MaximumBarsLookBack.Infinite);
+                signal = new Series<double>(this, MaximumBarsLookBack.Infinite);
+            }
+        }
+
+        protected override void OnBarUpdate()
+        {
+            if (CurrentBars[0] < Math.Max(fastLength, slowLength))
+                return;
+
+            double fastMA = SMA(Close, fastLength)[0];
+            double slowMA = SMA(Close, slowLength)[0];
+
+            // Calculate Ultimate RSI
+            double upper = MAX(High, rsiLength)[0];
+            double lower = MIN(Low, rsiLength)[0];
+            double r = upper - lower;
+            double d = Close[0] - Close[1];
+            double diff = upper > MAX(High, rsiLength)[1] ? r : lower < MIN(Low, rsiLength)[1] ? -r : d;
+
+            Series<double> smaDiffSeries = new Series<double>(this, MaximumBarsLookBack.Infinite);
+            smaDiffSeries[0] = diff;
+            double smaDiff = SMA(smaDiffSeries, rsiLength)[0];
+
+            Series<double> smaAbsDiffSeries = new Series<double>(this, MaximumBarsLookBack.Infinite);
+            smaAbsDiffSeries[0] = Math.Abs(diff);
+            double smaAbsDiff = SMA(smaAbsDiffSeries, rsiLength)[0];
+
+            ultimateRsi[0] = (smaDiff / smaAbsDiff) * 50 + 50;
+            signal[0] = EMA(ultimateRsi, smooth)[0];
+
+            // Define long and short conditions
+            bool longCondition = CrossAbove(SMA(Close, fastLength), SMA(Close, slowLength), 1) && ultimateRsi[0] < oversold && signal[0] < oversold;
+            bool shortCondition = CrossBelow(SMA(Close, fastLength), SMA(Close, slowLength), 1) && ultimateRsi[0] > overbought && signal[0] > overbought;
+
+            // Execute trades
+            if (longCondition)
+            {
+                EnterLong("Long");
+            }
+
+            if (shortCondition)
+            {
+                EnterShort("Short");
+            }
+        }
+    }
+}
